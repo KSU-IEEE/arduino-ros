@@ -14,9 +14,9 @@ rosserial_generate_ros_lib(
 )
 
 rosserial_configure_client(
-  DIRECTORY firmware
+  DIRECTORY test
   TOOLCHAIN_FILE ${ROSSERIAL_ARDUINO_TOOLCHAIN}
 )
 
-rosserial_add_client_target(firmware hello ALL)
-rosserial_add_client_target(firmware hello-upload)
+rosserial_add_client_target(test hello ALL)
+rosserial_add_client_target(test hello-upload)
