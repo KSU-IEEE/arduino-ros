@@ -20,3 +20,11 @@ rosserial_configure_client(
 
 rosserial_add_client_target(test hello ALL)
 rosserial_add_client_target(test hello-upload)
+
+##########################################
+## Install launch files
+##########################################
+install(DIRECTORY launch
+DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
+FILES_MATCHING PATTERN "*.launch"
+)
