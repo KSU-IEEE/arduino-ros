@@ -1,0 +1,25 @@
+<launch>
+<node pkg="rosserial_python"
+        type="serial_node.py"
+        name="driverDuino"
+        output="screen">
+    <param name="port" value="/dev/ttyS4"/>
+    <param name="baud" value="57600"/>
+</node>
+
+<node pkg="rosserial_python"
+        type="serial_node.py"
+        name="armDuino"
+        output="screen">
+    <param name="port" value="/dev/ttyS4"/>
+    <param name="baud" value="57600"/>
+</node>
+
+<node pkg="rosserial_python"
+        type="serial_node.py"
+        name="periphDuino"
+        output="screen">
+    <param name="port" value="/dev/ttyS4"/>
+    <param name="baud" value="57600"/>
+</node>
+</launch>

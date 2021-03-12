@@ -95,6 +95,11 @@ ros::Subscriber <std_msgs::Bool> sub_reset("/arm/reset", &armReset_cb);
 // normal stuff
 /*********************************************************************/
 void setup() {
+  nh.initNode();
+  while (!nh.connected()) {
+        nh.spinOnce();
+    }
+  
   // create publishers and subscribers
   nh.advertise( pub_done );
   nh.advertise(pub_distance);

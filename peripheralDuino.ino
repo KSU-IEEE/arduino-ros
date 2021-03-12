@@ -14,10 +14,6 @@
 
 // CONSTANTS
 /*********************************************************************/
-#define STARTING_X 0
-#define STARTING_Y 0
-#define STARTING_H 0
-
 #define VAR 100
 #define TARGET_FREQ 10000
 
@@ -27,9 +23,11 @@
 float heading;
 behaviors::coordinate loc;
 std_msgs::Char PP;
+std_msgs::Bool start;
 float prevDist[4]; // front back -- 0 = front left, 1 = front right, 2 = back left, 3 = back right 
 enum FSM {WAIT, LISTEN, POSE};
 int state;
+bool isTurning = false;
 
 ros::NodeHandle nh;
 
@@ -38,25 +36,7 @@ ros::NodeHandle nh;
 /*********************************************************************/
 ros::Publisher pub_position("position", &loc);
 ros::Publisher pub_ppLoc("PPLocation", &PP);
-
-
-// callbacks
-/*********************************************************************/
-void heading_cb( const std_msgs::Float64& new_head) {
-  heading = int(new_head.data) % 360;
-}
-
-void startListen_cb( const std_msgs::Bool& yes) {
-  if (yes.data) {
-    state = FSM::LISTEN;
-  }
-}
-
-
-// subscribers
-/*********************************************************************/
-ros::Subscriber <std_msgs::Float64> sub_heading ("heading", &heading_cb);
-ros::Subscriber <std_msgs::Bool> sub_startListen("StartListening", 1000);
+ros::Publisher pub_start("StartSignal", &start);
 
 
 // sensors
@@ -70,6 +50,44 @@ NewPing sensors [4] = {
 };
 
 noise_recognition::noiseRecognition nr(A0, VAR, TARGET_FREQ);
+
+// callbacks
+/*********************************************************************/
+void heading_cb( const std_msgs::Float64& new_head) {
+  heading = int(new_head.data) % 360;
+}
+
+void startListen_cb( const std_msgs::Bool& yes) {
+  if (yes.data) {
+    state = FSM::LISTEN;
+  }
+}
+
+void turning_cb(const std_msgs::Bool& yes) {
+  if (yes.data) {
+    isTurning = true;
+  }
+}
+
+void finished_cb(const std_msgs::Bool & yes) {
+  if (yes.data && isTurning) {
+    isTurning = false;
+
+    // get new previous values
+  for (int sensor = 0; sensor < 4; sensor++)
+    prevDist[sensor] = sensors[sensor].ping_in(); 
+  }
+}
+
+
+// subscribers
+/*********************************************************************/
+ros::Subscriber <std_msgs::Float64> sub_heading ("heading", &heading_cb);
+ros::Subscriber <std_msgs::Bool> sub_startListen("StartListening", 1000);
+ros::Subscriber <std_msgs::Bool> sub_turnLeft("/bot/turnLeft", &turning_cb);
+ros::Subscriber <std_msgs::Bool> sub_turnRight("/bot/turnRight", &turning_cb);
+ros::Subscriber <std_msgs::Bool> sub_turn180("/bot/turn180", &turning_cb);
+ros::Subscriber <std_msgs::Bool> sub_doneMove("/bot/doneMove", &finished_cb);
 
 
 // pose updates
@@ -93,6 +111,7 @@ float round_map(float num) {
 
 // distance sensing functions
 void update_pos() {
+  if(!isTurning) {
   float currDist[4];
   float sum = 0;
   
@@ -128,6 +147,7 @@ void update_pos() {
 
   // send pose 
   pub_position.publish( &loc );
+  }
 }
 
 
@@ -141,11 +161,22 @@ void do_noise_rec() {
   bool inC = false;
   float start = millis();
   int thirty_seconds_ms = 25000; // rounding this down to cut it early if needed
+  bool flicker = true;
   while(millis() - start < thirty_seconds_ms) {
     inC = nr.listenFor(TARGET_FREQ);
+
+    // flicker status light
+    digitalWrite(10, (flicker) ? HIGH : LOW);
+    flicker = !flicker;
+    
     if(inC) break;
   }
-  PP.data = inC;
+
+  // set status lights
+  digitalWrite(11, (inC) ? LOW : HIGH);
+  digitalWrite(12, (inC) ? HIGH : LOW);
+  
+  PP.data = (inC) ? 'C' : 'A';
   pub_ppLoc.publish(&PP);
 }
 
@@ -153,11 +184,10 @@ void do_noise_rec() {
 // normal stuff
 /*********************************************************************/
 void setup() {
-  // have to intialize start values for sensors
-  // initial locations
-  loc.X = STARTING_X;
-  loc.Y = STARTING_Y;
-  heading = STARTING_H;
+  nh.initNode();
+   while (!nh.connected()) {
+        nh.spinOnce();
+    }
 
   // setup fsm
   state = FSM::WAIT;
@@ -165,21 +195,51 @@ void setup() {
   // setup publishers and subscribers
   nh.advertise(pub_position);
   nh.advertise(pub_ppLoc);
+  nh.advertise(pub_start);
   
   nh.subscribe(sub_heading);
   nh.subscribe(sub_startListen);
+  nh.subscribe(sub_turnLeft);
+  nh.subscribe(sub_turnRight);
+  nh.subscribe(sub_turn180);
+  nh.subscribe(sub_doneMove);
+
+  // setup switch
+  pinMode(13, INPUT);
+
+  //setup LEDS
+  pinMode(10, OUTPUT);
+  pinMode(11, OUTPUT);
+  pinMode(12, OUTPUT);
+
+  // get initial reads
+  for (int sensor = 0; sensor < 4; sensor++){
+    prevDist[sensor] = sensors[sensor].ping_in(); 
+  }
 }
 
 void loop() {
   switch(state) {
     case (FSM::WAIT):  // break out of this in startListen_cb()
+      int reading = digitalRead(13); // checkout the switch
+      if (reading == HIGH) {
+        start.data = true;
+        pub_start.publish(&start);
+      }
       break;
     case (FSM::LISTEN): // break out after a value is sent
       do_noise_rec();
+      float val;
+      nh.getParam("starting_x", &val, 1);
+      loc.X = val;
+      nh.getParam("starting_y", &val, 1);
+      loc.Y = val;
+      nh.getParam("startingHeading", &heading);
       break;
     case (FSM::POSE): // do this forever after the first two are called
-      update_pos();
+      if (!isTurning) update_pos();
       break;
+     nh.spinOnce();
   }
 
 }

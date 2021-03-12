@@ -111,6 +111,11 @@ ros::Subscriber <std_msgs::Float64> sub_heading("heading", &head_cb);
 // normal stuff
 /*********************************************************************/
 void setup() {
+  nh.initNode();
+  while (!nh.connected()) {
+      nh.spinOnce();
+  }
+
   // setup pubs and subs
   nh.advertise(pub_done);
 
@@ -138,7 +143,7 @@ void loop() {
     // if passed, then send stop signals
     bot.brake();
     pub_done.publish( &doneMove );
-
   }
+  nh.spinOnce();
 }
 }
